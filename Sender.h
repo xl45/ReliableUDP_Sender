@@ -13,59 +13,65 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
+#include <vector>
+#include <cstring>
 
-#define 0 SLOW_START
-#define 1 CONGESTION_AVOID
-#define 2 FAST_RECOVERY
-#define 1 INIT_SEQ_NUM
+// for phase
+#define SLOW_START 0
+#define CONGESTION_AVOID 1
+#define FAST_RECOVERY 2
+// 
+#define INIT_SEQ_NUM 1
+// for ack_flag
+#define FLAG_ACK 0
+#define FALG_DATA 1
 
 typedef char BYTE;
 
-// header length = 10 bytes
-struct header{
+// pkt max length = 1500-20(ip)-20(udp) = 1460
+// now the pkt size is 988+10 bytes, 1KB
+struct pkt{
     int seq_num;
     int ack_num;
-    short ack_flag;
-};
-
-// pkt max length = 1500-20(ip)-20(udp) = 1460
-// now the pkt size is 900+10 bytes
-struct pkt{
-    struct header;
-    BYTE payload[900];
+    int ack_flag;
+    BYTE payload[988];
 };
 
 
 class Sender
 {
     public:
-        Sender( std::string port );
-        void work( std::string filename );
+        Sender( std::string port, int advertisedWindow );
         virtual ~Sender();
+        // api for the application layer
+        void send( std::string filename );
 
     private:
         // for udp transmit
         struct addrinfo hints;
-        struct addrinfo *serverinfo;
-        struct sockaddr_storage client_addr;
-        socklen_t addr_len;
-        int serverFD;
+        struct addrinfo *senderinfo;
+        struct sockaddr_in receiver_addr;
+        int senderFD;
 
         // for reliable transmit
-        int nextSeqNum;
+        void init( int advertisedWindow ); // initialize those parameters
+        int maxSeqNum; // next seq# to send
         int sendBase;
         int cwnd;
         int ssthresh;
         int dupACKcount;
-        int recvwnd;
-        int state; // (0 - slow start, 1 - congestion avoidance, 2 - fast recovery )
+        int recvwnd; // AdvertisedWindow
+        int phase; 
+        std::vector<pkt> pktlist; 
 
         // functions
-        onTimeout();
-        onThreeDupACK();
-        mySend();
-        myHandle(); // processing ACKs received from the receiver
-        calcCwnd();
+        // onTimeout();
+        // onThreeDupACK();
+        // mySend();
+        // myHandle(); // processing ACKs received from the receiver
+        // calcCwnd();
+        void pktlist_generator( std::string filename ); // generate segments from layer 5 data, put into pktlist
+        void workphase_slowstart();
 };
 
 #endif // SENDER_H

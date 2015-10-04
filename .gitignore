@@ -1,1 +1,7 @@
-ReliableUDP_Sender.*
+# Ignore everything
+*
+
+# But not these files...
+!*.cpp
+!*.h
+!*.txt
