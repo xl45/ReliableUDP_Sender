@@ -65,15 +65,16 @@ void Sender::send( std::string filename ){
 void Sender::workphase_slowstart(){
     // send all pkt in the cwnd
     while( sendBase <= maxSeqNum - 1 ){
-        // int size = sizeof(pktlist[sendBase]);
-        // char temp[size];
-        // memcpy( temp, &(pktlist[sendBase]), size );
-        std::string test = "123";
-        if( sendto(senderFD, test.c_str(), 3, 0, receiverinfo->ai_addr, receiverinfo->ai_addrlen) == -1){
+        int size = sizeof(pktlist[sendBase]);
+        char temp[size];
+        memcpy( temp, &(pktlist[sendBase]), size );
+
+        if( sendto(senderFD, temp, size, 0, receiverinfo->ai_addr, receiverinfo->ai_addrlen) == -1){
             perror("sender sendto(): ");
             exit(1);
         }
-        std::cout << "sending out: " << test << std::endl;
+        
+        std::cout << "sending out bytes: " << size << ", content: \n" << temp << std::endl << std::endl;
         sendBase++;
     }
 }
