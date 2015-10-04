@@ -40,7 +40,7 @@ Sender::Sender( std::string port, int advertisedWindow ){
 void Sender::send( std::string filename ){
 	pktlist_generator(filename);
 
-    //while(1){
+    while(1){
         switch(phase){
             case SLOW_START:
                 workphase_slowstart();
@@ -56,7 +56,7 @@ void Sender::send( std::string filename ){
             default:
                 break;
         }
-    //}
+    }
 
     close(senderFD);
 }
@@ -73,7 +73,7 @@ void Sender::workphase_slowstart(){
             perror("sender sendto(): ");
             exit(1);
         }
-        
+
         std::cout << "sending out bytes: " << size << ", content: \n" << temp << std::endl << std::endl;
         sendBase++;
     }
