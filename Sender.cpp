@@ -2,13 +2,14 @@
 
 
 void Sender::init( int advertisedWindow ){
-    sendBase = 0;
+    sendBase = 1;
     cwnd = 1;
-    maxSeqNum = sendBase + cwnd;
+    maxSeqNum = sendBase + cwnd - 1;
     ssthresh = 64; // 64KB
     dupACKcount = 0;
     recvwnd = advertisedWindow;
     phase = SLOW_START;
+    dupACK_flag = 0;
 }
 
 
@@ -40,42 +41,180 @@ Sender::Sender( std::string port, int advertisedWindow ){
 void Sender::send( std::string filename ){
 	pktlist_generator(filename);
 
-    while(1){
+    while( sendBase <= pktnum ){
         switch(phase){
             case SLOW_START:
+                std::cout << "current phase: SLOW_START, cwnd: " << cwnd <<"\n";
                 workphase_slowstart();
+                std::cout << "\n";
                 break;
 
             case CONGESTION_AVOID:
-
+                std::cout << "current phase: CONGESTION_AVOID, cwnd: " << cwnd <<"\n";
+                workphase_congestion_avoid();
+                std::cout << "\n";
                 break;
 
             case FAST_RECOVERY:
+                std::cout << "current phase: FAST_RECOVERY, cwnd: " << cwnd <<"\n";
+                workphase_fase_recovery();
+                std::cout << "\n";
                 break;
 
             default:
                 break;
         }
     }
-
+    std::cout << "\n\n@@@@ finish sending ! @@@@\n";
     close(senderFD);
+}
+
+
+void Sender::workphase_fase_recovery(){
+    // after 3 dup ack
+    if( dupACK_flag ){
+        sendPkt(&pktlist[sendBase - 1]);
+        dupACK_flag = 0;
+        return;
+    }
+    // send all pkt in the cwnd
+    for( int i = 0; i < cwnd; i++ ){
+        sendPkt(&pktlist[(sendBase-1)+i]);
+    }
+    sleep(1);
+    // should recv number of ack: current cwnd
+    int current_cwnd = cwnd;
+    for( int j = 0; j < current_cwnd; j++ ){
+        int req_num = recvACK();
+
+        if( req_num > sendBase ){
+            // maxSeqNum += req_num - sendBase;
+            sendBase = req_num;
+            cwnd++;
+        }else{
+            dupACKcount++;
+            if( dupACKcount == 3 ){
+                ssthresh = cwnd/2;
+                cwnd = ssthresh + 3;
+                dupACKcount = 0;
+                phase = FAST_RECOVERY;
+                std::cout << "  ~~~~ sender recv 3 dup ack!! ~~~~\n";
+                return;
+            }
+        }
+    }
+    // if reach ssthresh
+    if( cwnd >= ssthresh ){
+        phase = CONGESTION_AVOID;
+    }
+    sleep(1);
+}
+
+
+void Sender::workphase_congestion_avoid(){
+    // send all pkt in the cwnd
+    for( int i = 0; i < cwnd; i++ ){
+        sendPkt(&pktlist[(sendBase-1)+i]);
+    }
+    sleep(1);
+    // should recv number of ack: current cwnd
+    int current_cwnd = cwnd;
+    for( int j = 0; j < current_cwnd; j++ ){
+        int req_num = recvACK();
+
+        if( req_num > sendBase ){
+            // maxSeqNum += req_num - sendBase;
+            sendBase = req_num;
+        }else{
+            dupACKcount++;
+            if( dupACKcount == 3 ){
+                ssthresh = cwnd/2;
+                cwnd = ssthresh + 3;
+                dupACKcount = 0;
+                phase = FAST_RECOVERY;
+                dupACK_flag = 1;
+                std::cout << "  ~~~~ sender recv 3 dup ack!! ~~~~\n";
+                return;
+            }
+        }
+    }
+    cwnd++;
+    sleep(1);
 }
 
 
 void Sender::workphase_slowstart(){
     // send all pkt in the cwnd
-    while( sendBase <= maxSeqNum - 1 ){
-        int size = sizeof(pktlist[sendBase]);
-        char temp[size];
-        memcpy( temp, &(pktlist[sendBase]), size );
+    for( int i = 0; i < cwnd; i++ ){
+        sendPkt(&pktlist[(sendBase-1)+i]);
+    }
+    sleep(1);
+    // should recv number of ack: current cwnd
+    int current_cwnd = cwnd;
+    for( int j = 0; j < current_cwnd; j++ ){
+        int req_num = recvACK();
 
-        if( sendto(senderFD, temp, size, 0, receiverinfo->ai_addr, receiverinfo->ai_addrlen) == -1){
-            perror("sender sendto(): ");
-            exit(1);
+        if( req_num > sendBase ){
+            // maxSeqNum += req_num - sendBase;
+            sendBase = req_num;
+            cwnd++;
+        }else{
+            dupACKcount++;
+            if( dupACKcount == 3 ){
+                ssthresh = cwnd/2;
+                cwnd = ssthresh + 3;
+                dupACKcount = 0;
+                phase = FAST_RECOVERY;
+                dupACK_flag = 1;
+                std::cout << "  ~~~~ sender recv 3 dup ack!! ~~~~\n";
+                return;
+            }
         }
+    }
+    // if reach ssthresh
+    if( cwnd >= ssthresh ){
+        phase = CONGESTION_AVOID;
+    }
+    sleep(1);
+}
 
-        std::cout << "sending out bytes: " << size << ", content: \n" << temp << std::endl << std::endl;
-        sendBase++;
+
+void Sender::sendPkt(struct pkt * packet){
+    char temp[PKT_SIZE];
+    memcpy( temp, packet, PKT_SIZE );
+
+    if( sendto(senderFD, temp, PKT_SIZE, 0, receiverinfo->ai_addr, receiverinfo->ai_addrlen) == -1){
+        perror("sender sendto(): ");
+        exit(1);
+    }
+
+    std::cout << "--send pkt-- " << "seq_num: " << packet->seq_num << "\n";
+}
+
+
+int Sender::recvACK(){
+    BYTE temp[PKT_SIZE];
+
+    if( (recvfrom( senderFD, temp, PKT_SIZE, 0, NULL, NULL )) == -1 ){
+        perror("sender recvfrom(): ");
+        exit(1);
+    }
+
+    struct pkt myPkt;
+    memcpy( &myPkt, temp, PKT_SIZE );
+    std::cout << "**recv ack** " << "ack_num: " << myPkt.ack_num << "\n";
+
+    checkIfFin(myPkt.ack_num);
+
+    return myPkt.ack_num;
+}
+
+
+void Sender::checkIfFin(int ack_num){
+    if( ack_num > pktnum ){
+        std::cout << "\n\n@@@@ finish sending !!!!!! @@@@\n";
+        close(senderFD);
+        exit(1);
     }
 }
 
@@ -93,7 +232,7 @@ void Sender::pktlist_generator(std::string filename){
         long file_size = ftell(pFile);
         rewind (pFile);
         // calculate number of packet
-        int pktnum = file_size/988 + 1;
+        pktnum = file_size/988 + 1;
         // read the data into pktlist
         BYTE temp[988];
         for( int i = 0; i < pktnum; i++ ){
@@ -108,6 +247,7 @@ void Sender::pktlist_generator(std::string filename){
         }
         // close file
         fclose(pFile);
+        std::cout << pktnum << " packets total.\n\n";
     }
 
     // checker

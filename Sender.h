@@ -25,6 +25,8 @@
 // for ack_flag
 #define FLAG_ACK 0
 #define FALG_DATA 1
+//
+#define PKT_SIZE 1000
 
 typedef char BYTE;
 
@@ -61,16 +63,22 @@ class Sender
         int dupACKcount;
         int recvwnd; // AdvertisedWindow
         int phase; 
+        int dupACK_flag;
+        int pktnum;
         std::vector<pkt> pktlist; 
 
         // functions
         // onTimeout();
         // onThreeDupACK();
-        // mySend();
+        void sendPkt(struct pkt * packet);
+        int recvACK();
         // myHandle(); // processing ACKs received from the receiver
         // calcCwnd();
         void pktlist_generator( std::string filename ); // generate segments from layer 5 data, put into pktlist
         void workphase_slowstart();
+        void workphase_congestion_avoid();
+        void workphase_fase_recovery();
+        void checkIfFin(int ack_num);
 };
 
 #endif // SENDER_H
