@@ -49,8 +49,7 @@ class Sender
     private:
         // for udp transmit
         struct addrinfo hints;
-        struct addrinfo *senderinfo;
-        struct sockaddr_in receiver_addr;
+        struct addrinfo *receiverinfo;
         int senderFD;
 
         // for reliable transmit
